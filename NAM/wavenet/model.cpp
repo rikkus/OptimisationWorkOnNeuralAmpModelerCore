@@ -18,6 +18,7 @@
 #if defined(NAM_ENABLE_FUSED)
   #include "fused.h"
 #endif
+#include "engine_prefer.h"
 
 // detail::Head (WaveNet post-stack head) =====================================
 
@@ -1239,17 +1240,29 @@ std::unique_ptr<nam::ModelConfig> nam::wavenet::create_config(const nlohmann::js
   if (config_is_slimmable_wavenet(config))
     return nam::slimmable_wavenet::create_config(config, sampleRate);
 
+  const EnginePrefer prefer = get_engine_prefer();
+  const bool force_generic = (prefer == EnginePrefer::Generic);
+  const bool force_fused = (prefer == EnginePrefer::FusedNeon);
+
 #if defined(NAM_ENABLE_FUSED)
   // Fused NEON engine (AArch64). Checked before the A2 fast path: it covers
   // shapes with channels % 4 == 0 (including A2 standard), while A2 nano
   // (channels == 3) falls through to the A2 fast path below.
-  if (nam::wavenet::fused::is_fused_shape(config))
+  if (!force_generic && nam::wavenet::fused::is_fused_shape(config))
     return nam::wavenet::fused::create_fused_config(config, sampleRate);
+  if (force_fused)
+  {
+    // Caller asked for fused but shape does not match — fall through to generic
+    // rather than silently picking a2_fast.
+  }
+  else
 #endif
-
 #if defined(NAM_ENABLE_A2_FAST)
-  if (int a2_channels = 0; nam::wavenet::a2_fast::is_a2_shape(config, &a2_channels))
-    return nam::wavenet::a2_fast::create_a2_fast_config(config, sampleRate);
+    if (!force_generic && !force_fused)
+    {
+      if (int a2_channels = 0; nam::wavenet::a2_fast::is_a2_shape(config, &a2_channels))
+        return nam::wavenet::a2_fast::create_a2_fast_config(config, sampleRate);
+    }
 #endif
 
   auto wc = std::make_unique<WaveNetConfig>();

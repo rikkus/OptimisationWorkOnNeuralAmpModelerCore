@@ -1,0 +1,155 @@
+Analysis of sampling benchmodel (pid 24063) every 1 millisecond
+Process:         benchmodel [24063]
+Path:            /Users/USER/*/benchmodel
+Load Address:    0x100790000
+Identifier:      benchmodel
+Version:         0
+Code Type:       ARM64
+Platform:        macOS
+Parent Process:  zsh [24043]
+Target Type:     live task
+
+Date/Time:       2026-07-14 10:58:49.105 pm +0100
+Launch Time:     2026-07-14 10:58:48.752 pm +0100
+OS Version:      macOS 27.0 (26A5378n)
+Report Version:  7
+Analysis Tool:   /usr/bin/sample
+----
+
+Call graph:
+    5104 Thread_348724   DispatchQueue_1: com.apple.main-thread  (serial)
+      5104 start  (in dyld) + 6688  [0x18787fbec]
+        5104 main  (in benchmodel) + 1876  [0x100791734]
+          3828 nam::wavenet::fused::(anonymous namespace)::FusedWaveNet::process(double**, double**, int)  (in benchmodel) + 1072  [0x1007d443c]
+          + 3828 nam::wavenet::fused::(anonymous namespace)::conv_block<2>(float const* const*, int, float const*, float const*, float const*, float const*, float*, int)  (in benchmodel) + 400,328,...  [0x1007d5c78,0x1007d5c30,...]
+          535 nam::wavenet::fused::(anonymous namespace)::FusedWaveNet::process(double**, double**, int)  (in benchmodel) + 1152,2804,...  [0x1007d448c,0x1007d4b00,...]
+          499 nam::wavenet::fused::(anonymous namespace)::FusedWaveNet::process(double**, double**, int)  (in benchmodel) + 724  [0x1007d42e0]
+          + 499 nam::wavenet::fused::(anonymous namespace)::tail_block<2>(float const*, float const*, float const*, bool, float*, float*, int)  (in benchmodel) + 300,80,...  [0x1007d6024,0x1007d5f48,...]
+          131 nam::wavenet::fused::(anonymous namespace)::FusedWaveNet::process(double**, double**, int)  (in benchmodel) + 812  [0x1007d4338]
+          + 130 _platform_memmove  (in libsystem_platform.dylib) + 180,204,...  [0x187c5fe14,0x187c5fe2c,...]
+          + 1 DYLD-STUB$$memcpy  (in benchmodel) + 4  [0x1007fba94]
+          67 nam::wavenet::fused::(anonymous namespace)::FusedWaveNet::process(double**, double**, int)  (in benchmodel) + 1020  [0x1007d4408]
+          + 65 _platform_memmove  (in libsystem_platform.dylib) + 180,0,...  [0x187c5fe14,0x187c5fd60,...]
+          + 2 DYLD-STUB$$memcpy  (in benchmodel) + 4  [0x1007fba94]
+          16 nam::wavenet::fused::(anonymous namespace)::FusedWaveNet::process(double**, double**, int)  (in benchmodel) + 648  [0x1007d4294]
+          + 16 nam::wavenet::fused::(anonymous namespace)::rechannel_block<2>(float const*, float const*, int, float*, int)  (in benchmodel) + 40,88,...  [0x1007d61b0,0x1007d61e0,...]
+          15 nam::wavenet::fused::(anonymous namespace)::FusedWaveNet::process(double**, double**, int)  (in benchmodel) + 848  [0x1007d435c]
+          + 15 _platform_memmove  (in libsystem_platform.dylib) + 180,200  [0x187c5fe14,0x187c5fe28]
+          2 nam::wavenet::fused::(anonymous namespace)::FusedWaveNet::process(double**, double**, int)  (in benchmodel) + 660  [0x1007d42a0]
+          + 2 _platform_memset  (in libsystem_platform.dylib) + 140  [0x187c5fb1c]
+          2 nam::wavenet::fused::(anonymous namespace)::FusedWaveNet::process(double**, double**, int)  (in benchmodel) + 3536  [0x1007d4ddc]
+          + 2 _platform_memmove  (in libsystem_platform.dylib) + 180  [0x187c5fe14]
+          1 nam::wavenet::fused::(anonymous namespace)::FusedWaveNet::process(double**, double**, int)  (in benchmodel) + 1476  [0x1007d45d0]
+          + 1 DYLD-STUB$$memcpy  (in benchmodel) + 4  [0x1007fba94]
+          1 nam::wavenet::fused::(anonymous namespace)::FusedWaveNet::process(double**, double**, int)  (in benchmodel) + 1576  [0x1007d4634]
+          + 1 DYLD-STUB$$memcpy  (in benchmodel) + 4  [0x1007fba94]
+          1 nam::wavenet::fused::(anonymous namespace)::FusedWaveNet::process(double**, double**, int)  (in benchmodel) + 1676  [0x1007d4698]
+          + 1 _platform_memmove  (in libsystem_platform.dylib) + 180  [0x187c5fe14]
+          1 nam::wavenet::fused::(anonymous namespace)::FusedWaveNet::process(double**, double**, int)  (in benchmodel) + 1776  [0x1007d46fc]
+          + 1 _platform_memmove  (in libsystem_platform.dylib) + 180  [0x187c5fe14]
+          1 nam::wavenet::fused::(anonymous namespace)::FusedWaveNet::process(double**, double**, int)  (in benchmodel) + 1976  [0x1007d47c4]
+          + 1 DYLD-STUB$$memcpy  (in benchmodel) + 4  [0x1007fba94]
+          1 nam::wavenet::fused::(anonymous namespace)::FusedWaveNet::process(double**, double**, int)  (in benchmodel) + 2076  [0x1007d4828]
+          + 1 _platform_memmove  (in libsystem_platform.dylib) + 204  [0x187c5fe2c]
+          1 nam::wavenet::fused::(anonymous namespace)::FusedWaveNet::process(double**, double**, int)  (in benchmodel) + 2420  [0x1007d4980]
+          + 1 _platform_memmove  (in libsystem_platform.dylib) + 180  [0x187c5fe14]
+          1 nam::wavenet::fused::(anonymous namespace)::FusedWaveNet::process(double**, double**, int)  (in benchmodel) + 3096  [0x1007d4c24]
+          + 1 _platform_memmove  (in libsystem_platform.dylib) + 428  [0x187c5ff0c]
+          1 nam::wavenet::fused::(anonymous namespace)::FusedWaveNet::process(double**, double**, int)  (in benchmodel) + 3448  [0x1007d4d84]
+            1 _platform_memmove  (in libsystem_platform.dylib) + 204  [0x187c5fe2c]
+
+Total number in stack (recursive counted multiple, when >=5):
+        10       _platform_memmove  (in libsystem_platform.dylib) + 0  [0x187c5fd60]
+        5       DYLD-STUB$$memcpy  (in benchmodel) + 0  [0x1007fba90]
+
+Sort by top of stack, same collapsed (when >= 5):
+        nam::wavenet::fused::(anonymous namespace)::conv_block<2>(float const* const*, int, float const*, float const*, float const*, float const*, float*, int)  (in benchmodel)        3828
+        nam::wavenet::fused::(anonymous namespace)::FusedWaveNet::process(double**, double**, int)  (in benchmodel)        535
+        nam::wavenet::fused::(anonymous namespace)::tail_block<2>(float const*, float const*, float const*, bool, float*, float*, int)  (in benchmodel)        499
+        _platform_memmove  (in libsystem_platform.dylib)        218
+        nam::wavenet::fused::(anonymous namespace)::rechannel_block<2>(float const*, float const*, int, float*, int)  (in benchmodel)        16
+        DYLD-STUB$$memcpy  (in benchmodel)        6
+
+Binary Images:
+       0x100790000 -        0x1008051e7 +benchmodel (0) <E1D3D2E2-1F2D-3199-A24A-E7F9DFE8D627> /Users/*/benchmodel
+       0x1877cc000 -        0x18781b4e7  libobjc.A.dylib (971) <839C2D2A-67FB-303C-B173-61BB35BED0F0> /usr/lib/libobjc.A.dylib
+       0x18781c000 -        0x18782623f  libsharedcache.dylib (0) <A0BA3AF0-2CD4-39A0-9EB1-AC7FBFD9D6E1> /usr/lib/libsharedcache.dylib
+       0x187827000 -        0x18784dceb  libdyld.dylib (27059.3) <8F997505-5660-3D22-80B2-9FDEA7431FAD> /usr/lib/system/libdyld.dylib
+       0x18784e000 -        0x18790ce9f  dyld (1.0.0 - 27059.3) <89B5B1C2-C361-31EB-B7FB-65DC92293210> /usr/lib/dyld
+       0x18790d000 -        0x18791001f  libsystem_blocks.dylib (98.1) <786B0507-E04D-392A-91EF-E3CA27F7F132> /usr/lib/system/libsystem_blocks.dylib
+       0x187911000 -        0x18796603f  libxpc.dylib (3298.0.10) <9657C121-6344-367D-8356-70C8058CA4CC> /usr/lib/system/libxpc.dylib
+       0x187967000 -        0x187986b33  libsystem_trace.dylib (1965) <E6992755-0467-353D-9F56-7B6888A224D5> /usr/lib/system/libsystem_trace.dylib
+       0x187987000 -        0x187a3c29f  libcorecrypto.dylib (2109.0.11) <C7E805A1-E727-301D-959B-E8682A12CF3F> /usr/lib/system/libcorecrypto.dylib
+       0x187a3d000 -        0x187a929b7  libsystem_malloc.dylib (886.0.4) <888B2D76-E664-374A-BC9D-8246ED21AE0B> /usr/lib/system/libsystem_malloc.dylib
+       0x187a93000 -        0x187ad919f  libdispatch.dylib (1605) <25087587-6DDC-3D24-9A3E-53B860CE6140> /usr/lib/system/libdispatch.dylib
+       0x187ada000 -        0x187adcd2b  libsystem_featureflags.dylib (107) <9C340434-BBCB-3AC0-B8C4-938160989A75> /usr/lib/system/libsystem_featureflags.dylib
+       0x187add000 -        0x187b5fbdb  libsystem_c.dylib (1786.0.1) <9551A968-1E9B-33C2-9D58-2151018E2542> /usr/lib/system/libsystem_c.dylib
+       0x187b60000 -        0x187bf5033  libc++.1.dylib (2200.25) <2798D51E-0EDC-32CB-B10B-BF2113D7DD83> /usr/lib/libc++.1.dylib
+       0x187bf6000 -        0x187c0feff  libc++abi.dylib (2200.25) <F40BD75E-C3B0-39EB-90C7-40A113AE4985> /usr/lib/libc++abi.dylib
+       0x187c10000 -        0x187c4e953  libsystem_kernel.dylib (13432.0.50.501.3) <494C57E5-D214-30F8-83B0-7A57C7AB5FDF> /usr/lib/system/libsystem_kernel.dylib
+       0x187c4f000 -        0x187c5b91b  libsystem_pthread.dylib (553) <8201CE5B-7871-3349-AF2A-83E7D6FFAA31> /usr/lib/system/libsystem_pthread.dylib
+       0x187c5c000 -        0x187c65603  libsystem_platform.dylib (402) <CEB692E7-CC60-37E3-ACDA-7CEAAF09E857> /usr/lib/system/libsystem_platform.dylib
+       0x187c66000 -        0x187c948f3  libsystem_info.dylib (603) <402DB648-B508-35AD-8C8F-EAE443F1E449> /usr/lib/system/libsystem_info.dylib
+       0x18bc62000 -        0x18bc6babb  libsystem_darwin.dylib (1786.0.1) <D0AFA6D4-FA10-3BAB-B6A6-C2D5D453E6B8> /usr/lib/system/libsystem_darwin.dylib
+       0x18c0bf000 -        0x18c0d0b8b  libsystem_notify.dylib (367) <7147983F-48F9-34E0-9FF3-B7E8575EE51F> /usr/lib/system/libsystem_notify.dylib
+       0x18e1c2000 -        0x18e1dcda3  libsystem_networkextension.dylib (2322.0.0.501.1) <95D61260-3F15-3EAA-B66D-1981DE40121E> /usr/lib/system/libsystem_networkextension.dylib
+       0x18e269000 -        0x18e280247  libsystem_asl.dylib (409) <5617D1B4-6082-342B-A671-FF31885B4E27> /usr/lib/system/libsystem_asl.dylib
+       0x18f3c8000 -        0x18f3c8f2f  libobjcMsgSend.dylib (971) <92DE5673-A064-3F60-9304-BBFC08C241D6> /usr/lib/objc/libobjcMsgSend.dylib
+       0x190340000 -        0x190347edf  libsystem_symptoms.dylib (2385) <CEFD58CF-5974-3E74-BF2D-7CEDE7745B5F> /usr/lib/system/libsystem_symptoms.dylib
+       0x1946c9000 -        0x194703967  libsystem_containermanager.dylib (833.0.0.501.1) <A885D0FB-A212-31ED-BB51-99544AE6589C> /usr/lib/system/libsystem_containermanager.dylib
+       0x195e1a000 -        0x195e1e317  libsystem_configuration.dylib (1441) <3343DBC7-07D2-3D70-86E0-F2A7F6E4B080> /usr/lib/system/libsystem_configuration.dylib
+       0x195e1f000 -        0x195e2594f  libsystem_sandbox.dylib (3051.0.30) <80C603E2-ABC4-3053-B2DB-365742944A5C> /usr/lib/system/libsystem_sandbox.dylib
+       0x1973c8000 -        0x1973c8f2f  libobjcMsgSend1.dylib (971) <60ABE57D-C838-31BF-BD26-5EA9C3A8C1AC> /usr/lib/objc/libobjcMsgSend1.dylib
+       0x1979f1000 -        0x1979f3f93  libquarantine.dylib (217.0.2) <A191F173-7FE3-3DA8-8031-BD4C0E927C7D> /usr/lib/system/libquarantine.dylib
+       0x198107000 -        0x19810d1cf  libsystem_coreservices.dylib (201) <B75BADAB-A020-3309-B8C6-057FBC16395B> /usr/lib/system/libsystem_coreservices.dylib
+       0x1986cb000 -        0x198708b27  libsystem_m.dylib (3326.0.1) <14B1D523-6D34-30EC-A3AB-EC49F9B60D18> /usr/lib/system/libsystem_m.dylib
+       0x19870a000 -        0x19870d4d7  libmacho.dylib (27059.3) <EC76C9B9-1DFE-3FD8-BD33-823EED27CD8E> /usr/lib/system/libmacho.dylib
+       0x198727000 -        0x1987336ff  libcommonCrypto.dylib (600041) <DC0A6B27-0C45-3E99-B0B2-DB3FC4285A4A> /usr/lib/system/libcommonCrypto.dylib
+       0x198734000 -        0x19873dc87  libunwind.dylib (2200.5) <289FF204-B4A1-338A-8607-4C915BF4E939> /usr/lib/system/libunwind.dylib
+       0x198745000 -        0x19874f7bb  libcopyfile.dylib (260) <AD14DF25-FC2A-3B07-B74E-635CADC29BBA> /usr/lib/system/libcopyfile.dylib
+       0x198750000 -        0x1987538af  libcompiler_rt.dylib (103.4) <A9D26C06-952E-3EED-9F79-E9DDA53C949A> /usr/lib/system/libcompiler_rt.dylib
+       0x198754000 -        0x198759087  libsystem_collections.dylib (1786.0.1) <3E655071-DC46-3A08-B2FC-0867B7F78A82> /usr/lib/system/libsystem_collections.dylib
+       0x19875a000 -        0x19875cf1f  libsystem_secinit.dylib (182) <A9B9F146-DA4D-39BD-81C5-811FE7057A2E> /usr/lib/system/libsystem_secinit.dylib
+       0x19875d000 -        0x19875f97f  libremovefile.dylib (95) <34461ADC-0A5B-3067-9FF2-EA912634A217> /usr/lib/system/libremovefile.dylib
+       0x198760000 -        0x198760e27  libkeymgr.dylib (31) <84C2DCD9-BD43-3877-AE4A-FFB62AC67E3F> /usr/lib/system/libkeymgr.dylib
+       0x198761000 -        0x198769af7  libsystem_dnssd.dylib (3089.0.0.0.1) <9BCF2C29-1D50-3898-B25E-8FBB4B5DD9B5> /usr/lib/system/libsystem_dnssd.dylib
+       0x19876a000 -        0x19876ef1b  libcache.dylib (95) <E8A45388-D9D4-35A0-8AFE-E76147E049F3> /usr/lib/system/libcache.dylib
+       0x19876f000 -        0x1987708f3  libSystem.B.dylib (1359) <0119077C-8446-3EA2-B8A7-5C00C9FBC365> /usr/lib/libSystem.B.dylib
+       0x19f3c8000 -        0x19f3c8f2f  libobjcMsgSend2.dylib (971) <A0D6FD38-8DE6-3A3A-8D19-9CB1ACE6BA71> /usr/lib/objc/libobjcMsgSend2.dylib
+       0x1a73c8000 -        0x1a73c8f2f  libobjcMsgSend3.dylib (971) <A6565966-C050-347B-BA91-7F045C64A843> /usr/lib/objc/libobjcMsgSend3.dylib
+       0x1af3c8000 -        0x1af3c8f2f  libobjcMsgSend4.dylib (971) <71F07C7E-C68A-3349-B9C9-62788F57E41E> /usr/lib/objc/libobjcMsgSend4.dylib
+       0x1b73c8000 -        0x1b73c8f2f  libobjcMsgSend5.dylib (971) <5A5AC25C-9D33-3CDB-AFFC-C80E09F6E69B> /usr/lib/objc/libobjcMsgSend5.dylib
+       0x1bf3c8000 -        0x1bf3c8f2f  libobjcMsgSend6.dylib (971) <0A49B029-FE6E-3830-B7EB-CEED60D1E231> /usr/lib/objc/libobjcMsgSend6.dylib
+       0x1c73c8000 -        0x1c73c8f2f  libobjcMsgSend7.dylib (971) <3BF43D8F-73B2-3080-A366-BB37FB19014C> /usr/lib/objc/libobjcMsgSend7.dylib
+       0x1cf3c8000 -        0x1cf3c8f2f  libobjcMsgSend8.dylib (971) <4E20EB92-8CCD-3A2D-AA26-094F520DD86B> /usr/lib/objc/libobjcMsgSend8.dylib
+       0x1d73c8000 -        0x1d73c8f2f  libobjcMsgSend9.dylib (971) <50426798-1E39-3EC6-929B-01D8381746F3> /usr/lib/objc/libobjcMsgSend9.dylib
+       0x1df3c8000 -        0x1df3c8f2f  libobjcMsgSend10.dylib (971) <CC22413A-E1A1-35AE-A706-08478B8F3DE6> /usr/lib/objc/libobjcMsgSend10.dylib
+       0x1e73c8000 -        0x1e73c8f2f  libobjcMsgSend11.dylib (971) <B62EB277-BA33-315B-BCF4-48FB32F24299> /usr/lib/objc/libobjcMsgSend11.dylib
+       0x20f3c8000 -        0x20f3c8f2f  libobjcMsgSend12.dylib (971) <A2E9E642-549D-3C0C-8F25-28499DB75F81> /usr/lib/objc/libobjcMsgSend12.dylib
+       0x2173c8000 -        0x2173c8f2f  libobjcMsgSend13.dylib (971) <4E349B79-1B50-353A-BFE7-7FA38FCE83C0> /usr/lib/objc/libobjcMsgSend13.dylib
+       0x21f3c8000 -        0x21f3c8f2f  libobjcMsgSend14.dylib (971) <B90E2FFE-CABB-32E1-A739-49D98C2EF9D0> /usr/lib/objc/libobjcMsgSend14.dylib
+       0x2273c8000 -        0x2273c8f2f  libobjcMsgSend15.dylib (971) <A4E355C3-5CB6-303E-A688-D2780503525E> /usr/lib/objc/libobjcMsgSend15.dylib
+       0x22f3c8000 -        0x22f3c8f2f  libobjcMsgSend16.dylib (971) <A3053956-CDCD-33CB-9494-051B6C01090D> /usr/lib/objc/libobjcMsgSend16.dylib
+       0x2373c8000 -        0x2373c8f2f  libobjcMsgSend17.dylib (971) <21D23B94-F6E3-303E-B01C-21A39B690ADA> /usr/lib/objc/libobjcMsgSend17.dylib
+       0x23f3c8000 -        0x23f3c8f2f  libobjcMsgSend18.dylib (971) <43643C25-4B42-3567-9D00-E6AC8FC5C3D3> /usr/lib/objc/libobjcMsgSend18.dylib
+       0x2473c8000 -        0x2473c8f2f  libobjcMsgSend19.dylib (971) <56584406-2F98-3E9D-B863-E73946FDCF4A> /usr/lib/objc/libobjcMsgSend19.dylib
+       0x24f3c8000 -        0x24f3c8f2f  libobjcMsgSend20.dylib (971) <79CE976B-5547-32A1-9AC3-7D221D36951C> /usr/lib/objc/libobjcMsgSend20.dylib
+       0x2573c8000 -        0x2573c8f2f  libobjcMsgSend21.dylib (971) <667ECA5B-61FD-318A-9913-0D9752734B60> /usr/lib/objc/libobjcMsgSend21.dylib
+       0x25f3c8000 -        0x25f3c8f2f  libobjcMsgSend22.dylib (971) <7B62709D-AFA9-35E4-8EEC-F082AD923564> /usr/lib/objc/libobjcMsgSend22.dylib
+       0x2673c8000 -        0x2673c8f2f  libobjcMsgSend23.dylib (971) <6FA90215-1556-30AC-B6FF-F344AB8FA20A> /usr/lib/objc/libobjcMsgSend23.dylib
+       0x26f3c8000 -        0x26f3c8f2f  libobjcMsgSend24.dylib (971) <AD6982C3-AEE3-3BCA-8E34-DD05B376E319> /usr/lib/objc/libobjcMsgSend24.dylib
+       0x2773c8000 -        0x2773c8f2f  libobjcMsgSend25.dylib (971) <ED5BB8BE-AAD9-3AE8-A3CC-D35F25FFB057> /usr/lib/objc/libobjcMsgSend25.dylib
+       0x2973c8000 -        0x2973c8f2f  libobjcMsgSend26.dylib (971) <8F07338A-A8B3-3EBA-8DB6-897EAAB5E62F> /usr/lib/objc/libobjcMsgSend26.dylib
+       0x29f3c8000 -        0x29f3c8f2f  libobjcMsgSend27.dylib (971) <E208B95F-719C-3989-B756-EC1AB84A8622> /usr/lib/objc/libobjcMsgSend27.dylib
+       0x2a73c8000 -        0x2a73c8f2f  libobjcMsgSend28.dylib (971) <0C41C6B5-EBE4-3A07-8AC4-1C38972900BB> /usr/lib/objc/libobjcMsgSend28.dylib
+       0x2af3c8000 -        0x2af3c8f2f  libobjcMsgSend29.dylib (971) <5F1B8415-5110-34D2-9D05-C9A7C58B2916> /usr/lib/objc/libobjcMsgSend29.dylib
+       0x2b73c8000 -        0x2b73c8f2f  libobjcMsgSend30.dylib (971) <FC57ADDC-971A-3099-A070-0AB6E93AC8E7> /usr/lib/objc/libobjcMsgSend30.dylib
+       0x2b84a6000 -        0x2b84acfe5  libRosetta.dylib (383) <D74D593E-4FF7-3783-AD49-851A797BD297> /usr/lib/libRosetta.dylib
+       0x2b8ec0000 -        0x2b8ec375b  libsystem_darwindirectory.dylib (129) <FDB971E7-E0D0-3BC6-9DF4-681930B337BC> /usr/lib/system/libsystem_darwindirectory.dylib
+       0x2b8ec4000 -        0x2b8eceda3  libsystem_eligibility.dylib (443.0.0.501.2) <911140A3-1D01-39AB-A88D-2AE1D75E729D> /usr/lib/system/libsystem_eligibility.dylib
+       0x2b8ecf000 -        0x2b8ed850b  libsystem_sanitizers.dylib (32) <BBCA4AC7-C3F6-3183-AD22-0DBF940A0F28> /usr/lib/system/libsystem_sanitizers.dylib
+       0x2b8ed9000 -        0x2b8ed9a13  libsystem_trial.dylib (507) <04C70378-B47E-3A56-9F58-3F08B4AEFF83> /usr/lib/system/libsystem_trial.dylib
+       0x2bf3c8000 -        0x2bf3c8f2f  libobjcMsgSend31.dylib (971) <260504EB-7CE8-3850-B139-5C0AD561F0E7> /usr/lib/objc/libobjcMsgSend31.dylib
+       0x2c73c8000 -        0x2c73c8f2f  libobjcMsgSend32.dylib (971) <F653286B-B141-3004-8A22-E042B291F23F> /usr/lib/objc/libobjcMsgSend32.dylib
+       0x2cf3c8000 -        0x2cf3c8f2f  libobjcMsgSend33.dylib (971) <CF904E3A-5409-3986-B61F-DBB6070E97BF> /usr/lib/objc/libobjcMsgSend33.dylib
+       0x2d73c8000 -        0x2d73c8f2f  libobjcMsgSend34.dylib (971) <CBB6A048-050B-31DB-9788-9DFCAB84E92D> /usr/lib/objc/libobjcMsgSend34.dylib

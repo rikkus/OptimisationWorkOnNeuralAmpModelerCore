@@ -108,14 +108,27 @@ by the (irreducible at fp32) tanh evaluation and the memory traffic floor.
 
 ## Future directions considered
 
+- **Fuse activation into conv/tail (A2 / LeakyReLU)**: measured on Apple M2
+  (ORNG@slim1.0 and A1). Folding the NEON act into conv-store, into
+  tail-load, or into a single conv+act+tail kernel removed the middle `_z`
+  pass but did **not** improve wall time — and the full layer kernel
+  **regressed ~1.5×** (register pressure / forcing a narrower tile that
+  slowed the dominant dilated GEMM). Kept as three passes. See
+  `benchmark_reports/a2_actfuse_20260714.md`.
 - **fp16 / bf16**: `FMLAL`-style fp16 multiplies with fp32 accumulation give
   the same 4 MACs/instruction as fp32 FMA on Apple cores — no compute win,
   only bandwidth (we are compute-bound). Full fp16 accumulation doubles
   throughput but the 11-bit mantissa is a real audio-quality risk across a
   48-term accumulation; not pursued.
-- **SME/SME2 (M4+)**: the streaming-SVE matrix unit could substantially beat
-  NEON on these GEMMs; needs M4 hardware to develop/validate.
+- **SME/SME2 (M4+ / A19+)**: explored on branch `sme2-channel-major` (planar
+  ZA layout). Rejected for production `Auto`: on iPhone 17 / ORNG@slim1.0
+  (C=8), SME2 CM beat generic (~1.3×) but lost to fused NEON (~0.64×). Not
+  carried on `optimise-for-apple-silicon`.
 - **Multithreading**: layer arrays are sequential, so parallelism would have
   to split channels within a layer; with 64-sample deadlines the sync jitter
   is a poor trade for a plugin. Apple's audio-workgroup API would be the
   right vehicle if ever needed.
+- **A2 / A1 K specialization** (compile-time `K∈{3,6,15}` inside `conv_block`):
+  implemented. On Apple M2, A/B vs the runtime tap loop is **noise (~0%)** for
+  ORNG@slim1.0 and A1 (`benchmark_reports/a2_k_spec_20260714.md`). Kept —
+  zero risk and clearer codegen for the common tap counts.

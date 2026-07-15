@@ -70,6 +70,7 @@ if(NAM_ENABLE_FUSED)
 	add_compile_definitions(NAM_ENABLE_FUSED)
 endif()
 
+
 add_subdirectory(tools)
 
 #file(MAKE_DIRECTORY build/tools)

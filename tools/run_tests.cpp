@@ -37,6 +37,7 @@
 #include "test/test_slimmable_wavenet.cpp"
 #include "test/test_a2_fast.cpp"
 #include "test/test_fused.cpp"
+#include "test/test_ir_convolution.cpp"
 
 int main()
 {
@@ -385,6 +386,14 @@ int main()
   test_fused::test_channels_12_20_match_generic();
   test_fused::test_process_is_realtime_safe();
 #endif
+
+  // Cab IR partitioned FFT vs direct FIR parity.
+  test_ir_convolution::test_auto_selects_direct_for_short_ir();
+  test_ir_convolution::test_auto_selects_fft_for_long_ir();
+  test_ir_convolution::test_direct_matches_fft_block_sizes();
+  test_ir_convolution::test_impulse_response_direct_matches_fft();
+  test_ir_convolution::test_ya_ampg_ir_file_parity();
+  test_ir_convolution::test_fft_process_realtime_safe();
 
   std::cout << "Success!" << std::endl;
 #ifdef ADDASSERT

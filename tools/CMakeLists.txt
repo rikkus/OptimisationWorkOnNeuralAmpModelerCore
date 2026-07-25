@@ -2,6 +2,7 @@ file(GLOB NAM_SOURCES_TOP "${CMAKE_CURRENT_SOURCE_DIR}/../NAM/*.cpp" "${CMAKE_CU
 file(GLOB NAM_SOURCES_SUB "${CMAKE_CURRENT_SOURCE_DIR}/../NAM/*/*.cpp")
 set(NAM_SOURCES ${NAM_SOURCES_TOP} ${NAM_SOURCES_SUB})
 
+
 # TODO: add loadmodel and run_tests to TOOLS?
 set(TOOLS benchmodel)
 
@@ -10,6 +11,12 @@ add_custom_target(tools ALL
 
 set(AUDIO_DSP_TOOLS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../Dependencies/AudioDSPTools")
 set(AUDIO_DSP_TOOLS_WAV_SOURCES "${AUDIO_DSP_TOOLS_DIR}/dsp/wav.cpp")
+set(AUDIO_DSP_TOOLS_IR_SOURCES
+	"${AUDIO_DSP_TOOLS_DIR}/dsp/wav.cpp"
+	"${AUDIO_DSP_TOOLS_DIR}/dsp/dsp.cpp"
+	"${AUDIO_DSP_TOOLS_DIR}/dsp/ImpulseResponse.cpp"
+	"${AUDIO_DSP_TOOLS_DIR}/dsp/PartitionedConvolution.cpp"
+)
 
 include_directories(tools ..)
 include_directories(tools ${NAM_DEPS_PATH}/eigen)
@@ -22,6 +29,7 @@ add_executable(render render.cpp ${NAM_SOURCES} ${AUDIO_DSP_TOOLS_WAV_SOURCES})
 target_compile_features(render PUBLIC cxx_std_20)
 # AudioDSPTools wav.cpp has sign-compare issues; don't fail build
 set_source_files_properties(${AUDIO_DSP_TOOLS_WAV_SOURCES} PROPERTIES COMPILE_FLAGS "-Wno-error")
+set_source_files_properties(${AUDIO_DSP_TOOLS_IR_SOURCES} PROPERTIES COMPILE_FLAGS "-Wno-error")
 set_target_properties(render PROPERTIES
 	CXX_VISIBILITY_PRESET hidden
 	INTERPROCEDURAL_OPTIMIZATION TRUE
@@ -62,7 +70,31 @@ else()
 		"$<$<CONFIG:RELEASE>:-Ofast>"
 	)
 endif()
-add_executable(run_tests run_tests.cpp test/allocation_tracking.cpp ${NAM_SOURCES})
+
+# Amp + cab IR timing harness (plugin-like cascade).
+add_executable(bench_amp_ir bench_amp_ir.cpp ${NAM_SOURCES} ${AUDIO_DSP_TOOLS_IR_SOURCES})
+target_compile_features(bench_amp_ir PUBLIC cxx_std_20)
+set_target_properties(bench_amp_ir PROPERTIES
+	CXX_VISIBILITY_PRESET hidden
+	INTERPROCEDURAL_OPTIMIZATION TRUE
+	PREFIX ""
+)
+if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
+	target_compile_definitions(bench_amp_ir PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+endif()
+if (MSVC)
+	target_compile_options(bench_amp_ir PRIVATE
+		"$<$<CONFIG:DEBUG>:/W4>"
+		"$<$<CONFIG:RELEASE>:/O2>"
+	)
+else()
+	target_compile_options(bench_amp_ir PRIVATE
+		-Wall -Wextra -Wpedantic -Wstrict-aliasing -Wunreachable-code -Wno-unused-parameter
+		"$<$<CONFIG:DEBUG>:-Og;-ggdb;-Werror>"
+		"$<$<CONFIG:RELEASE>:-Ofast>"
+	)
+endif()
+add_executable(run_tests run_tests.cpp test/allocation_tracking.cpp ${NAM_SOURCES} ${AUDIO_DSP_TOOLS_IR_SOURCES})
 # Compile run_tests without optimizations to ensure allocation tracking works correctly
 # Also ensure assertions are enabled (NDEBUG is not defined) so tests actually run
 set_target_properties(run_tests PROPERTIES COMPILE_OPTIONS "-O0")

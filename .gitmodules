@@ -3,4 +3,4 @@
 	url = https://gitlab.com/libeigen/eigen
 [submodule "Dependencies/AudioDSPTools"]
 	path = Dependencies/AudioDSPTools
-	url = https://github.com/sdatkinson/AudioDSPTools.git
+	url = https://github.com/rikkus/AudioDSPTools.git

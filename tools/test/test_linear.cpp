@@ -1,11 +1,13 @@
 // Tests for Linear DSP models
 
 #include "NAM/dsp.h"
+#include "NAM/linear.h"
 
 #include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <stdexcept>
+#include <limits>
 #include <vector>
 
 #include "allocation_tracking.h"
@@ -220,6 +222,351 @@ void test_auto_fft_process_realtime_safe()
 {
   assert_process_realtime_safe(
     4096, nam::LinearImplementation::Auto, nam::LinearImplementation::FFT, "Linear auto FFT process real-time safe");
+}
+
+
+void test_arbitrary_sample_rate_capability()
+{
+  nam::DSP fixed_rate(1, 1, 48000.0);
+  assert(!fixed_rate.SupportsArbitrarySampleRate());
+  nam::Linear linear(1, 1, 1, false, {1.0f}, 48000.0);
+  nam::DSP& model = linear;
+  assert(model.SupportsArbitrarySampleRate());
+  model.Reset(96000.0, 4);
+  assert(model.SupportsArbitrarySampleRate());
+
+  nam::Linear unknown(1, 1, 1, false, {1.0f});
+  nam::DSP& unknown_model = unknown;
+  assert(!unknown_model.SupportsArbitrarySampleRate());
+  unknown_model.Reset(44100.0, 4);
+  assert(!unknown_model.SupportsArbitrarySampleRate());
+
+  for (const double rate :
+       {0.0, -2.0, std::numeric_limits<double>::infinity(), std::numeric_limits<double>::quiet_NaN()})
+  {
+    nam::Linear invalid_rate(1, 1, 1, false, {1.0f}, rate);
+    assert(!invalid_rate.SupportsArbitrarySampleRate());
+  }
+}
+
+// The cubic interpolation of a delayed unit impulse has these exact values.
+// The factor originalRate / desiredRate preserves the IR's gain.
+void test_sample_rate_known_values()
+{
+  for (const auto implementation : {nam::LinearImplementation::Direct, nam::LinearImplementation::FFT})
+  {
+    const std::vector<float> weights{0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.125f};
+    nam::Linear model(1, 1, 5, true, weights, 48000.0, implementation);
+    model.SetPrewarmOnReset(false);
+    std::vector<NAM_SAMPLE> input(16, 0.0);
+    input[0] = 1.0;
+    // Repeated changes must always use the original weights, including when
+    // returning to the training rate after processing nonzero audio.
+    for (int repeat = 0; repeat < 2; ++repeat)
+    {
+      for (const double rate : {96000.0, 24000.0, 48000.0})
+      {
+        model.Reset(rate, 7);
+        assert(model.GetExpectedSampleRate() == 48000.0);
+        const auto output = process_model(model, input, {1, 7, 3});
+        const std::vector<double> expected =
+          rate == 96000.0   ? std::vector<double>{0.0, -0.03125, 0.0, 0.28125, 0.5, 0.28125, 0.0, -0.03125, 0.0, 0.0}
+          : rate == 24000.0 ? std::vector<double>{0.0, 2.0, 0.0}
+                            : std::vector<double>{0.0, 0.0, 1.0, 0.0, 0.0};
+        for (size_t i = 0; i < output.size(); ++i)
+          assert_near(output[i], 0.125 + (i < expected.size() ? expected[i] : 0.0), 1.0e-6);
+      }
+    }
+  }
+}
+
+void test_sample_rate_fractional_and_fft()
+{
+  const int taps = 1200;
+  std::vector<float> weights(taps, 0.0f);
+  // A linear ramp is reproduced exactly by cubic interpolation away from the boundaries.
+  for (int i = 0; i < taps; ++i)
+    weights[i] = (float)i / taps;
+  nam::Linear direct(1, 1, taps, false, weights, 48000.0, nam::LinearImplementation::Direct);
+  nam::Linear automatic(1, 1, taps, false, weights, 48000.0);
+  for (const double rate : {44100.0, 32000.0, 96000.0, 48000.0})
+  {
+    const int length = (int)std::ceil(taps * rate / 48000.0);
+    direct.Reset(rate, 127);
+    automatic.Reset(rate, 127);
+    assert(automatic.GetActiveImplementation() == nam::linear::select_implementation(length));
+    std::vector<NAM_SAMPLE> input(length + 256, 0.0);
+    input[0] = 1.0;
+    const auto reference = process_model(direct, input, {127, 1, 13});
+    const auto output = process_model(automatic, input, {3, 64, 1, 127});
+    for (size_t i = 0; i < output.size(); ++i)
+    {
+      assert_near(output[i], reference[i], 2.0e-5);
+      const double source_position = i * 48000.0 / rate;
+      if (source_position >= 1.0 && source_position < taps - 2)
+        assert_near(output[i], source_position / taps * 48000.0 / rate, 2.0e-5);
+      if (i >= (size_t)length)
+        assert_near(output[i], 0.0, 2.0e-5);
+    }
+  }
+}
+
+void test_sample_rate_short_unknown_and_invalid()
+{
+  for (const auto implementation : {nam::LinearImplementation::Direct, nam::LinearImplementation::FFT})
+  {
+    nam::Linear short_ir(1, 1, 1, false, {1.0f}, 48000.0, implementation);
+    short_ir.Reset(96000.0, 4);
+    const auto output = process_model(short_ir, {1.0, 0.0, 0.0, 0.0}, {4});
+    assert_near(output[0], 0.5, 1.0e-7);
+    assert_near(output[1], 0.28125, 1.0e-7);
+    assert_near(output[2], 0.0, 1.0e-7);
+    short_ir.Reset(8000.0, 4);
+    assert_near(process_model(short_ir, {1.0}, {1})[0], 6.0, 1.0e-7);
+
+    // Without a training rate there is no conversion ratio; keep legacy weights.
+    nam::Linear unknown(1, 1, 2, false, {0.5f, 0.25f}, -1.0, implementation);
+    unknown.Reset(44100.0, 4);
+    const auto unchanged = process_model(unknown, {1.0, 0.0, 0.0}, {3});
+    assert_near(unchanged[0], 0.5, 1.0e-7);
+    assert_near(unchanged[1], 0.25, 1.0e-7);
+    assert(unknown.GetExpectedSampleRate() == -1.0);
+    for (const double rate : {0.0, -1.0, std::numeric_limits<double>::infinity(),
+                              std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::max()})
+    {
+      bool threw = false;
+      try
+      {
+        short_ir.Reset(rate, 4);
+      }
+      catch (const std::exception&)
+      {
+        threw = true;
+      }
+      assert(threw);
+    }
+  }
+}
+
+void test_sample_rate_multichannel_realtime_safe()
+{
+  for (const auto implementation : {nam::LinearImplementation::Direct, nam::LinearImplementation::FFT})
+  {
+    std::vector<float> weights(2048, 0.0f);
+    weights[300] = 1.0f;
+    nam::Linear model(2, 2, 2048, false, weights, 48000.0, implementation);
+    model.SetPrewarmOnReset(false);
+    model.Reset(96000.0, 64);
+    std::vector<NAM_SAMPLE> input0(64, 0.0), input1(64, 0.0);
+    std::vector<NAM_SAMPLE> output0(64), output1(64);
+    NAM_SAMPLE* inputs[] = {input0.data(), input1.data()};
+    NAM_SAMPLE* outputs[] = {output0.data(), output1.data()};
+    allocation_tracking::run_allocation_test_no_allocations(
+      nullptr,
+      [&]() {
+        for (int block = 0; block < 80; ++block)
+        {
+          input0[0] = block == 0 ? 1.0 : 0.0;
+          input1[0] = block == 0 ? 2.0 : 0.0;
+          model.process(inputs, outputs, 64);
+          for (int i = 0; i < 64; ++i)
+          {
+            const int position = block * 64 + i;
+            double expected = 0.0;
+            if (position == 600)
+              expected = 0.5;
+            if (position == 599 || position == 601)
+              expected = 0.28125;
+            if (position == 597 || position == 603)
+              expected = -0.03125;
+            assert_near(output0[i], expected, 1.0e-6);
+            assert_near(output1[i], 2.0 * expected, 1.0e-6);
+          }
+        }
+      },
+      nullptr, "Linear resampled first process real-time safe");
+    // Populate direct history and start pending FFT work before resetting.
+    std::fill(input0.begin(), input0.end(), 1.0);
+    std::fill(input1.begin(), input1.end(), 2.0);
+    for (int block = 0; block < 4; ++block)
+      model.process(inputs, outputs, 64);
+    // Same-rate reset must clear both kinds of state without relying on prewarm.
+    model.Reset(96000.0, 64);
+    std::fill(input0.begin(), input0.end(), 0.0);
+    std::fill(input1.begin(), input1.end(), 0.0);
+    for (int block = 0; block < 80; ++block)
+    {
+      model.process(inputs, outputs, 64);
+      for (int i = 0; i < 64; ++i)
+      {
+        assert_near(output0[i], 0.0, 1.0e-6);
+        assert_near(output1[i], 0.0, 1.0e-6);
+      }
+    }
+  }
+}
+
+
+void test_channel_mappings()
+{
+  for (const auto implementation : {nam::LinearImplementation::Direct, nam::LinearImplementation::FFT})
+    for (const auto shape : {std::pair<int, int>{1, 1}, {2, 2}, {1, 3}, {3, 1}})
+      for (const int taps : {3, 1536})
+        for (const bool bias : {false, true})
+        {
+          const int inputs = shape.first, outputs = shape.second;
+          const int paths = std::max(inputs, outputs);
+          const int kernels = inputs == outputs ? 1 : paths;
+          std::vector<float> weights;
+          for (int k = 0; k < kernels; ++k)
+          {
+            auto kernel = make_weights(taps, false);
+            for (auto& value : kernel)
+              value *= k % 2 == 0 ? k + 1.0f : -k - 1.0f;
+            weights.insert(weights.end(), kernel.begin(), kernel.end());
+          }
+          if (bias)
+            for (int ch = 0; ch < (inputs == outputs ? 1 : outputs); ++ch)
+              weights.push_back(0.125f * (ch + 1));
+          auto config =
+            nam::linear::parse_config_json({{"receptive_field", taps},
+                                            {"bias", bias},
+                                            {"in_channels", inputs},
+                                            {"out_channels", outputs},
+                                            {"implementation", nam::linear::implementation_to_string(implementation)}});
+          auto model = config.create(weights, 48000.0);
+          model->SetPrewarmOnReset(false);
+          for (const double rate : {48000.0, 96000.0, 48000.0})
+          {
+            model->Reset(rate, 127);
+            const int frames = 4096;
+            std::vector<std::vector<NAM_SAMPLE>> input(inputs, make_input(frames));
+            // Isolate later inputs first, then exercise simultaneous summation.
+            for (int ch = 0; ch < inputs; ++ch)
+              for (int i = 0; i < frames; ++i)
+                input[ch][i] *= ch == 0 && inputs > 1 && i < 512 ? 0.0 : ch + 1.0;
+            std::vector<std::vector<NAM_SAMPLE>> expected(outputs, std::vector<NAM_SAMPLE>(frames));
+            for (int ch = 0; ch < outputs; ++ch)
+              std::fill(
+                expected[ch].begin(), expected[ch].end(), bias ? 0.125 * (inputs == outputs ? 1 : ch + 1) : 0.0);
+            for (int path = 0; path < paths; ++path)
+            {
+              const int k = kernels == 1 ? 0 : path;
+              std::vector<float> kernel(weights.begin() + k * taps, weights.begin() + (k + 1) * taps);
+              nam::Linear reference(1, 1, taps, false, kernel, 48000.0, nam::LinearImplementation::Direct);
+              reference.SetPrewarmOnReset(false);
+              reference.Reset(rate, 127);
+              const auto result = process_model(reference, input[inputs == 1 ? 0 : path], {127, 1, 13});
+              for (int i = 0; i < frames; ++i)
+                expected[outputs == 1 ? 0 : path][i] += result[i];
+            }
+            std::vector<std::vector<NAM_SAMPLE>> output(outputs, std::vector<NAM_SAMPLE>(frames));
+            std::vector<NAM_SAMPLE*> in_ptrs(inputs), out_ptrs(outputs);
+            allocation_tracking::run_allocation_test_no_allocations(
+              nullptr,
+              [&]() {
+                int offset = 0;
+                while (offset < frames)
+                {
+                  const int count = std::min(offset % 127 + 1, frames - offset);
+                  for (int ch = 0; ch < inputs; ++ch)
+                    in_ptrs[ch] = input[ch].data() + offset;
+                  for (int ch = 0; ch < outputs; ++ch)
+                    out_ptrs[ch] = output[ch].data() + offset;
+                  model->process(in_ptrs.data(), out_ptrs.data(), count);
+                  offset += count;
+                }
+              },
+              nullptr, "Linear channel mapping process real-time safe");
+            for (int ch = 0; ch < outputs; ++ch)
+              for (int i = 0; i < frames; ++i)
+                assert_near(output[ch][i], expected[ch][i], 5.0e-5);
+          }
+        }
+}
+
+
+void test_channel_mapping_in_place()
+{
+  for (const auto implementation : {nam::LinearImplementation::Direct, nam::LinearImplementation::FFT})
+    for (const auto shape : {std::pair<int, int>{1, 2}, {2, 1}, {2, 2}})
+    {
+      const int taps = 1536, frames = 4096;
+      const int kernels = shape.first == shape.second ? 1 : 2;
+      std::vector<float> weights(kernels * taps, 0.0f);
+      weights[0] = 0.5f;
+      weights[500] = 0.25f;
+      if (kernels == 2)
+      {
+        weights[taps] = -0.25f;
+        weights[taps + 900] = 0.125f;
+      }
+      nam::Linear model(shape.first, shape.second, taps, false, weights, 48000.0, implementation);
+      model.SetPrewarmOnReset(false);
+      model.Reset(48000.0, 64);
+      auto first = make_input(frames), second = make_input(frames);
+      for (auto& x : second)
+        x *= 2;
+      const auto original_first = first, original_second = second;
+      for (int offset = 0; offset < frames; offset += 64)
+      {
+        NAM_SAMPLE* buffers[] = {first.data() + offset, second.data() + offset};
+        model.process(buffers, buffers, 64);
+      }
+      for (int ch = 0; ch < shape.second; ++ch)
+        for (int i = 0; i < frames; ++i)
+        {
+          double expected = 0.0;
+          for (int path = 0; path < 2; ++path)
+          {
+            if (shape.second > 1 && ch != path)
+              continue;
+            const auto& source = shape.first == 1 || path == 0 ? original_first : original_second;
+            const int k = kernels == 1 ? 0 : path;
+            for (int tap : {0, 500, 900})
+              if (i >= tap)
+                expected += weights[k * taps + tap] * source[i - tap];
+          }
+          assert_near(ch == 0 ? first[i] : second[i], expected, 1.0e-6);
+        }
+    }
+}
+
+void test_channel_validation()
+{
+  const auto defaults = nam::linear::parse_config_json({{"receptive_field", 3}, {"bias", false}});
+  assert(defaults.in_channels == 1 && defaults.out_channels == 1);
+  for (const auto shape : {std::pair<int, int>{2, 3}, {3, 2}, {0, 1}, {1, 0}, {-1, 1}, {1, -1}})
+  {
+    bool threw = false;
+    try
+    {
+      nam::Linear model(shape.first, shape.second, 3, false, {1, 0, 0});
+    }
+    catch (const std::runtime_error& e)
+    {
+      threw = true;
+      assert(std::string(e.what()).find("channel") != std::string::npos
+             || std::string(e.what()).find("Channel") != std::string::npos);
+    }
+    assert(threw);
+  }
+  for (const auto shape : {std::pair<int, int>{1, 2}, {2, 1}})
+    for (const bool bias : {false, true})
+      for (const int delta : {-1, 1})
+      {
+        bool threw = false;
+        try
+        {
+          nam::Linear model(
+            shape.first, shape.second, 3, bias, std::vector<float>(6 + (bias ? shape.second : 0) + delta));
+        }
+        catch (const std::runtime_error&)
+        {
+          threw = true;
+        }
+        assert(threw);
+      }
 }
 
 } // namespace test_linear

@@ -5,6 +5,7 @@
 #include <cassert>
 #include <cctype>
 #include <complex>
+#include <cmath>
 #include <limits>
 #include <stdexcept>
 
@@ -38,6 +39,38 @@ int _ceil_div(const int numerator, const int denominator)
   return (numerator + denominator - 1) / denominator;
 }
 
+// Adapted from AudioDSPTools dsp/Resample.h:
+// https://github.com/sdatkinson/AudioDSPTools/blob/844680d118f0317565132c3c5e3aca5f5c976e7a/dsp/Resample.h
+// Sample by integer output index to avoid accumulated timing error,
+// and zero-pad the causal impulse response at both ends for cubic interpolation.
+std::vector<float> _resample_impulse_response(const std::vector<float>& inputs, const double original_rate,
+                                              const double desired_rate)
+{
+  const double ratio = desired_rate / original_rate;
+  const double length = std::ceil(inputs.size() * ratio);
+  if (!std::isfinite(length) || length > std::numeric_limits<int>::max())
+    throw std::length_error("Resampled Linear impulse response is too large");
+  // Even an IR shorter than one output sample needs its sample at t=0.
+  std::vector<float> outputs((size_t)std::max(1.0, length));
+  const auto sample = [&inputs](const long long index) -> double {
+    return index < 0 || index >= (long long)inputs.size() ? 0.0 : inputs[(size_t)index];
+  };
+  for (size_t i = 0; i < outputs.size(); ++i)
+  {
+    const double position = i == 0 ? 0.0 : i / ratio;
+    const long long index = (long long)std::floor(position);
+    const double x = position - index;
+    const double p[4] = {sample(index - 1), sample(index), sample(index + 1), sample(index + 2)};
+    const double value =
+      p[1]
+      + 0.5 * x
+          * (p[2] - p[0] + x * (2.0 * p[0] - 5.0 * p[1] + 4.0 * p[2] - p[3] + x * (3.0 * (p[1] - p[2]) + p[3] - p[0])));
+    // An IR is integrated by convolution; compensate for the changed tap density.
+    outputs[i] = (float)(value * (original_rate / desired_rate));
+  }
+  return outputs;
+}
+
 } // namespace
 
 struct nam::LinearFFTState
@@ -68,7 +101,7 @@ struct nam::LinearFFTState
     int spectrum_size = 0;
     int num_partitions = 0;
     bool runs_inline = false;
-    std::vector<std::vector<Complex>> kernel_spectra;
+    std::vector<std::vector<std::vector<Complex>>> kernel_spectra;
     std::vector<TierChannelState> channels;
   };
 
@@ -91,22 +124,35 @@ nam::Linear::Linear(const int in_channels, const int out_channels, const int rec
 , _requested_implementation(implementation)
 , _active_implementation(LinearImplementation::Direct)
 {
-  if ((int)weights.size() != (receptive_field + (_bias ? 1 : 0)))
-    throw std::runtime_error(
-      "Params vector does not match expected size based "
-      "on architecture parameters");
+  if (in_channels != out_channels && in_channels != 1 && out_channels != 1)
+    throw std::runtime_error("Linear requires equal channel counts or one input/output channel");
+  const int kernels = in_channels == out_channels ? 1 : std::max(in_channels, out_channels);
+  const int biases = in_channels == out_channels ? 1 : out_channels;
+  const size_t coefficient_count = (size_t)receptive_field * kernels;
+  if (weights.size() != coefficient_count + (_bias ? biases : 0))
+    throw std::runtime_error("Linear parameter count does not match impulse responses and output biases");
 
-  this->_impulse_response.assign(weights.begin(), weights.begin() + receptive_field);
-  this->_weight.resize(this->_receptive_field);
-  // Pass in in reverse order so that dot products work out of the box.
-  for (int i = 0; i < this->_receptive_field; i++)
-    this->_weight(i) = weights[receptive_field - 1 - i];
-  this->_bias = _bias ? weights[receptive_field] : (float)0.0;
+  this->_impulse_response.resize(kernels);
+  for (int k = 0; k < kernels; ++k)
+    this->_impulse_response[k].assign(
+      weights.begin() + (size_t)k * receptive_field, weights.begin() + (size_t)(k + 1) * receptive_field);
+  this->_original_impulse_response = this->_impulse_response;
+  this->_configure_weights();
+  this->_bias.resize(out_channels, 0.0f);
+  if (_bias)
+    for (int ch = 0; ch < out_channels; ++ch)
+      this->_bias[ch] = weights[coefficient_count + (biases == 1 ? 0 : ch)];
 
   this->_configure_implementation();
 }
 
 nam::Linear::~Linear() = default;
+
+bool nam::Linear::SupportsArbitrarySampleRate()
+{
+  const double training_rate = GetExpectedSampleRate();
+  return std::isfinite(training_rate) && training_rate > 0.0;
+}
 
 void nam::Linear::process(NAM_SAMPLE** input, NAM_SAMPLE** output, const int num_frames)
 {
@@ -116,10 +162,51 @@ void nam::Linear::process(NAM_SAMPLE** input, NAM_SAMPLE** output, const int num
     this->_process_direct(input, output, num_frames);
 }
 
+void nam::Linear::Reset(const double sampleRate, const int maxBufferSize)
+{
+  if (!std::isfinite(sampleRate) || sampleRate <= 0.0)
+    throw std::invalid_argument("Linear processing sample rate must be finite and positive");
+  const double training_rate = GetExpectedSampleRate();
+  if (training_rate != NAM_UNKNOWN_EXPECTED_SAMPLE_RATE && (!std::isfinite(training_rate) || training_rate <= 0.0))
+    throw std::invalid_argument("Linear training sample rate must be finite and positive, or unknown (-1)");
+  if (maxBufferSize < 0)
+    throw std::invalid_argument("Linear maximum buffer size must be non-negative");
+
+  auto impulse_responses = this->_original_impulse_response;
+  if (training_rate != NAM_UNKNOWN_EXPECTED_SAMPLE_RATE && training_rate != sampleRate)
+    for (auto& response : impulse_responses)
+      response = _resample_impulse_response(response, training_rate, sampleRate);
+  if (impulse_responses.front().size() + 32LL * maxBufferSize > std::numeric_limits<int>::max())
+    throw std::length_error("Linear input buffer is too large");
+  this->_impulse_response = std::move(impulse_responses);
+  this->_receptive_field = (int)this->_impulse_response.front().size();
+  this->_configure_weights();
+  // SetMaxBufferSize rebuilds history and FFT state before any prewarming.
+  nam::DSP::Reset(sampleRate, maxBufferSize);
+}
+
 void nam::Linear::SetMaxBufferSize(const int maxBufferSize)
 {
+  const long long input_buffer_size = this->_receptive_field + 32LL * maxBufferSize;
+  if (maxBufferSize < 0 || input_buffer_size > std::numeric_limits<int>::max())
+    throw std::length_error("Linear input buffer is too large");
   nam::Buffer::SetMaxBufferSize(maxBufferSize);
+  // Match Buffer::_update_buffers_ capacity requirements before entering process().
+  this->_set_receptive_field(this->_receptive_field, (int)input_buffer_size);
+  for (auto& output : this->_output_buffers)
+    output.resize(maxBufferSize);
   this->_configure_implementation();
+}
+
+void nam::Linear::_configure_weights()
+{
+  this->_weight.resize(this->_impulse_response.size());
+  for (size_t k = 0; k < this->_weight.size(); ++k)
+  {
+    this->_weight[k].resize(this->_receptive_field);
+    for (int i = 0; i < this->_receptive_field; ++i)
+      this->_weight[k](i) = this->_impulse_response[k][this->_receptive_field - 1 - i];
+  }
 }
 
 void nam::Linear::_configure_implementation()
@@ -145,9 +232,13 @@ void nam::Linear::_configure_fft_state()
   state.direct_taps = std::min(this->_receptive_field, plan.direct_taps);
   state.sample_index = 0;
 
-  this->_fft_direct_weight.resize(state.direct_taps);
-  for (int i = 0; i < state.direct_taps; i++)
-    this->_fft_direct_weight(i) = this->_impulse_response[state.direct_taps - 1 - i];
+  this->_fft_direct_weight.resize(this->_impulse_response.size());
+  for (size_t k = 0; k < this->_impulse_response.size(); ++k)
+  {
+    this->_fft_direct_weight[k].resize(state.direct_taps);
+    for (int i = 0; i < state.direct_taps; ++i)
+      this->_fft_direct_weight[k](i) = this->_impulse_response[k][state.direct_taps - 1 - i];
+  }
 
   // The inline tier covers [head, 4 * head). Every subsequent power-of-two
   // tier starts at twice its block size, which gives it one full block of
@@ -171,16 +262,20 @@ void nam::Linear::_configure_fft_state()
     tier.spectrum_size = block_size + 1;
     tier.num_partitions = partitions;
     tier.runs_inline = first_tier;
-    tier.kernel_spectra.assign(partitions, std::vector<LinearFFTState::Complex>(tier.spectrum_size));
-
+    tier.kernel_spectra.resize(this->_impulse_response.size());
     std::vector<float> kernel_time(tier.fft_size, 0.0f);
-    for (int partition = 0; partition < partitions; partition++)
+    for (size_t k = 0; k < this->_impulse_response.size(); ++k)
     {
-      std::fill(kernel_time.begin(), kernel_time.end(), 0.0f);
-      const int start = offset + partition * block_size;
-      const int partition_size = std::min(block_size, this->_receptive_field - start);
-      std::copy_n(this->_impulse_response.begin() + start, partition_size, kernel_time.begin());
-      tier.fft.fwd(tier.kernel_spectra[partition].data(), kernel_time.data(), tier.fft_size);
+      auto& spectra = tier.kernel_spectra[k];
+      spectra.assign(partitions, std::vector<LinearFFTState::Complex>(tier.spectrum_size));
+      for (int partition = 0; partition < partitions; partition++)
+      {
+        std::fill(kernel_time.begin(), kernel_time.end(), 0.0f);
+        const int start = offset + partition * block_size;
+        const int partition_size = std::min(block_size, this->_receptive_field - start);
+        std::copy_n(this->_impulse_response[k].begin() + start, partition_size, kernel_time.begin());
+        tier.fft.fwd(spectra[partition].data(), kernel_time.data(), tier.fft_size);
+      }
     }
 
     offset += partitions * block_size;
@@ -188,7 +283,7 @@ void nam::Linear::_configure_fft_state()
       block_size = std::min(2 * block_size, plan.max_partition_size);
   }
 
-  const int channels_to_process = std::min(NumInputChannels(), NumOutputChannels());
+  const int channels_to_process = std::max(NumInputChannels(), NumOutputChannels());
   int largest_block_size = state.direct_taps;
   for (auto& tier : state.tiers)
   {
@@ -229,26 +324,21 @@ void nam::Linear::_process_direct(NAM_SAMPLE** input, NAM_SAMPLE** output, const
   const int in_channels = NumInputChannels();
   const int out_channels = NumOutputChannels();
 
-  // For now, Linear processes each input channel independently to corresponding output channel
-  // This is a simple implementation - can be extended later for cross-channel mixing
-  const int channelsToProcess = std::min(in_channels, out_channels);
-
-  // Main computation!
-  for (int ch = 0; ch < channelsToProcess; ch++)
+  const int paths = std::max(in_channels, out_channels);
+  for (int ch = 0; ch < out_channels; ++ch)
+    std::fill_n(output[ch], num_frames, this->_bias[ch]);
+  for (int path = 0; path < paths; ++path)
   {
-    for (int i = 0; i < num_frames; i++)
+    const int input_channel = in_channels == 1 ? 0 : path;
+    const int output_channel = out_channels == 1 ? 0 : path;
+    const auto& weight = this->_weight[this->_kernel_index(path)];
+    for (int i = 0; i < num_frames; ++i)
     {
-      const long offset = this->_input_buffer_offset - this->_weight.size() + i + 1;
-      auto input_vec = Eigen::Map<const Eigen::VectorXf>(&this->_input_buffers[ch][offset], this->_receptive_field);
-      output[ch][i] = this->_bias + this->_weight.dot(input_vec);
+      const long offset = this->_input_buffer_offset - this->_receptive_field + i + 1;
+      auto input_vec =
+        Eigen::Map<const Eigen::VectorXf>(&this->_input_buffers[input_channel][offset], this->_receptive_field);
+      output[output_channel][i] += weight.dot(input_vec);
     }
-  }
-
-  // Zero out any extra output channels
-  for (int ch = channelsToProcess; ch < out_channels; ch++)
-  {
-    for (int i = 0; i < num_frames; i++)
-      output[ch][i] = (NAM_SAMPLE)0.0;
   }
 
   // Prepare for next call:
@@ -261,29 +351,36 @@ void nam::Linear::_process_fft(NAM_SAMPLE** input, NAM_SAMPLE** output, const in
 
   const int in_channels = NumInputChannels();
   const int out_channels = NumOutputChannels();
-  const int channels_to_process = std::min(in_channels, out_channels);
+  const int channels_to_process = std::max(in_channels, out_channels);
   auto& state = *this->_fft_state;
   const int direct_taps = state.direct_taps;
 
   for (int i = 0; i < num_frames; i++)
   {
+    for (int ch = 0; ch < out_channels; ++ch)
+      output[ch][i] = this->_bias[ch];
     const long direct_offset = this->_input_buffer_offset - direct_taps + i + 1;
     for (int ch = 0; ch < channels_to_process; ch++)
     {
+      const int input_channel = in_channels == 1 ? 0 : ch;
+      const int output_channel = out_channels == 1 ? 0 : ch;
       this->_advance_fft_jobs(ch);
 
       const int ring_index = (int)(state.sample_index % state.output_ring_size);
       const float tail = state.output_channels[ch].output_ring[ring_index];
       state.output_channels[ch].output_ring[ring_index] = 0.0f;
 
-      auto input_vec = Eigen::Map<const Eigen::VectorXf>(&this->_input_buffers[ch][direct_offset], direct_taps);
-      output[ch][i] = this->_bias + this->_fft_direct_weight.dot(input_vec) + tail;
+      auto input_vec =
+        Eigen::Map<const Eigen::VectorXf>(&this->_input_buffers[input_channel][direct_offset], direct_taps);
+      output[output_channel][i] += this->_fft_direct_weight[this->_kernel_index(ch)].dot(input_vec);
+      output[output_channel][i] += tail;
 
       for (size_t tier_index = 0; tier_index < state.tiers.size(); ++tier_index)
       {
         auto& tier = state.tiers[tier_index];
         auto& channel = tier.channels[ch];
-        channel.input_time[channel.input_pos] = (float)input[ch][i];
+        // Read the buffered input so output writes cannot corrupt aliased input.
+        channel.input_time[channel.input_pos] = this->_input_buffers[input_channel][this->_input_buffer_offset + i];
         channel.input_pos++;
         if (channel.input_pos == tier.block_size)
         {
@@ -293,9 +390,6 @@ void nam::Linear::_process_fft(NAM_SAMPLE** input, NAM_SAMPLE** output, const in
         }
       }
     }
-
-    for (int ch = channels_to_process; ch < out_channels; ch++)
-      output[ch][i] = (NAM_SAMPLE)0.0;
 
     state.sample_index++;
   }
@@ -328,7 +422,8 @@ void nam::Linear::_advance_fft_job(const int tier_index, const int channel_index
     int input_spectrum_index = channel.job_spectrum_write_index - partition;
     if (input_spectrum_index < 0)
       input_spectrum_index += tier.num_partitions;
-    channel.accumulator[bin] += channel.input_spectra[input_spectrum_index][bin] * tier.kernel_spectra[partition][bin];
+    channel.accumulator[bin] += channel.input_spectra[input_spectrum_index][bin]
+                                * tier.kernel_spectra[this->_kernel_index(channel_index)][partition][bin];
     channel.job_work_index++;
   }
   channel.job_ticks_remaining--;

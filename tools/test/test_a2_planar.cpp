@@ -25,6 +25,8 @@
 
   #include "json.hpp"
 
+  #include "allocation_tracking.h"
+
   #include "NAM/dsp.h"
   #include "NAM/wavenet/a2_fast.h"
   #include "NAM/wavenet/a2_planar.h"
@@ -143,6 +145,26 @@ std::vector<NAM_SAMPLE> run_dsp(nam::DSP& dsp, const std::vector<NAM_SAMPLE>& in
   return out;
 }
 
+/// Process `input` as consecutive calls of at most `block_size`, without Reset:
+/// the host-side reference for an oversized call.
+std::vector<NAM_SAMPLE> process_dsp(nam::DSP& dsp, const std::vector<NAM_SAMPLE>& input, int block_size)
+{
+  std::vector<NAM_SAMPLE> out(input.size(), static_cast<NAM_SAMPLE>(0));
+  int pos = 0;
+  const int total = static_cast<int>(input.size());
+  while (pos < total)
+  {
+    const int n = std::min(block_size, total - pos);
+    const NAM_SAMPLE* in_ptr = input.data() + pos;
+    NAM_SAMPLE* out_ptr = out.data() + pos;
+    const NAM_SAMPLE* in_arr[] = {in_ptr};
+    NAM_SAMPLE* out_arr[] = {out_ptr};
+    dsp.process(const_cast<NAM_SAMPLE**>(in_arr), out_arr, n);
+    pos += n;
+  }
+  return out;
+}
+
 /// The whole point: identical bits, not a tolerance.
 void assert_bit_identical(const std::vector<NAM_SAMPLE>& reference, const std::vector<NAM_SAMPLE>& planar, int channels,
                           int block_size)
@@ -218,11 +240,58 @@ void test_factory_selects_planar()
   }
 }
 
+/// A call with more frames than the maximum buffer size must give exactly what
+/// the host gets by making calls of at most that size, without allocating. The
+/// planar models used to grow their buffers instead, which allocated on the
+/// audio thread and reset every ring mid-stream.
+void test_oversized_call_matches_consecutive_calls(int channels)
+{
+  const int max_buffer = 32;
+  const int call_size = 100; // Not a multiple of max_buffer, so each call's last chunk is short
+  const int num_calls = 20;
+  const auto weights = make_deterministic_weights(a2_weight_count(channels), /*seed=*/0xA2FA500u + channels);
+  std::vector<std::unique_ptr<nam::DSP>> dsps;
+  for (int i = 0; i < 2; i++)
+  {
+    dsps.push_back(nam::wavenet::a2_fast::create_a2_planar_model(channels, weights, 48000.0));
+    assert(dsps.back() != nullptr);
+    dsps.back()->Reset(48000.0, max_buffer);
+  }
+  auto& consecutive = *dsps[0];
+  auto& oversized = *dsps[1];
+
+  const auto input = make_test_input(num_calls * call_size, 48000.0);
+  std::vector<NAM_SAMPLE> actual(call_size);
+  for (int call = 0; call < num_calls; call++)
+  {
+    std::vector<NAM_SAMPLE> x(input.begin() + call * call_size, input.begin() + (call + 1) * call_size);
+    const auto expected = process_dsp(consecutive, x, max_buffer);
+    NAM_SAMPLE* in_ptr = x.data();
+    NAM_SAMPLE* out_ptr = actual.data();
+    const std::string test_name = "A2PlanarModel<" + std::to_string(channels) + ">::process oversized";
+    allocation_tracking::run_allocation_test_no_allocations(
+      nullptr, [&]() { oversized.process(&in_ptr, &out_ptr, call_size); }, nullptr, test_name.c_str());
+    assert(actual == expected);
+  }
+}
+
+void test_oversized_call_matches_consecutive_calls_nano()
+{
+  test_oversized_call_matches_consecutive_calls(3);
+}
+
+void test_oversized_call_matches_consecutive_calls_standard()
+{
+  test_oversized_call_matches_consecutive_calls(8);
+}
+
   #else // NAM_A2_PLANAR
 
 void test_bit_identical_nano() {}
 void test_bit_identical_standard() {}
 void test_factory_selects_planar() {}
+void test_oversized_call_matches_consecutive_calls_nano() {}
+void test_oversized_call_matches_consecutive_calls_standard() {}
 
   #endif // NAM_A2_PLANAR
 

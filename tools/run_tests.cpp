@@ -412,12 +412,16 @@ int main()
   test_a2_fast::test_cached_prewarm_full();
   test_a2_fast::test_process_realtime_safe_lite();
   test_a2_fast::test_process_realtime_safe_full();
+  test_a2_fast::test_oversized_call_matches_consecutive_calls_lite();
+  test_a2_fast::test_oversized_call_matches_consecutive_calls_full();
 
   // Planar NEON A2 kernels: bit-identity against the reference fast path.
   // No-ops where the planar kernels are not built.
   test_a2_planar::test_bit_identical_nano();
   test_a2_planar::test_bit_identical_standard();
   test_a2_planar::test_factory_selects_planar();
+  test_a2_planar::test_oversized_call_matches_consecutive_calls_nano();
+  test_a2_planar::test_oversized_call_matches_consecutive_calls_standard();
 #endif
 
   std::cout << "Success!" << std::endl;

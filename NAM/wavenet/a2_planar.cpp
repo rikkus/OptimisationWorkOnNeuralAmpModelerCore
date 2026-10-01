@@ -530,7 +530,10 @@ public:
   void process(NAM_SAMPLE** input, NAM_SAMPLE** output, const int num_frames) override
   {
     if (num_frames > GetMaxBufferSize())
-      SetMaxBufferSize(num_frames);
+    {
+      _process_in_chunks(input, output, num_frames);
+      return;
+    }
     const int N = num_frames;
 
     const NAM_SAMPLE* in0 = input[0];
@@ -563,6 +566,25 @@ public:
     const float* head_out = _head_out.data();
     for (int f = 0; f < N; f++)
       out0[f] = static_cast<NAM_SAMPLE>(head_out[f]);
+  }
+
+private:
+  // A call with more frames than the maximum buffer size, as consecutive calls of
+  // at most that size. Growing the buffers instead would allocate on the audio
+  // thread, and SetMaxBufferSize() resets every ring.
+  void _process_in_chunks(NAM_SAMPLE** input, NAM_SAMPLE** output, const int num_frames)
+  {
+    if (GetMaxBufferSize() == 0)
+    {
+      SetMaxBufferSize(num_frames); // Never Reset(): no state to keep, so size for this call
+    }
+    const int max_frames = GetMaxBufferSize();
+    for (int offset = 0; offset < num_frames; offset += max_frames)
+    {
+      NAM_SAMPLE* input_chunk = input[0] + offset;
+      NAM_SAMPLE* output_chunk = output[0] + offset;
+      A2PlanarNano::process(&input_chunk, &output_chunk, std::min(max_frames, num_frames - offset));
+    }
   }
 
 protected:
@@ -991,7 +1013,10 @@ public:
   void process(NAM_SAMPLE** input, NAM_SAMPLE** output, const int num_frames) override
   {
     if (num_frames > GetMaxBufferSize())
-      SetMaxBufferSize(num_frames);
+    {
+      _process_in_chunks(input, output, num_frames);
+      return;
+    }
     const int N = num_frames;
 
     const NAM_SAMPLE* in0 = input[0];
@@ -1035,6 +1060,25 @@ public:
     const float* head_out = _head_out.data();
     for (int f = 0; f < N; f++)
       out0[f] = static_cast<NAM_SAMPLE>(head_out[f]);
+  }
+
+private:
+  // A call with more frames than the maximum buffer size, as consecutive calls of
+  // at most that size. Growing the buffers instead would allocate on the audio
+  // thread, and SetMaxBufferSize() resets every ring.
+  void _process_in_chunks(NAM_SAMPLE** input, NAM_SAMPLE** output, const int num_frames)
+  {
+    if (GetMaxBufferSize() == 0)
+    {
+      SetMaxBufferSize(num_frames); // Never Reset(): no state to keep, so size for this call
+    }
+    const int max_frames = GetMaxBufferSize();
+    for (int offset = 0; offset < num_frames; offset += max_frames)
+    {
+      NAM_SAMPLE* input_chunk = input[0] + offset;
+      NAM_SAMPLE* output_chunk = output[0] + offset;
+      A2PlanarFull::process(&input_chunk, &output_chunk, std::min(max_frames, num_frames - offset));
+    }
   }
 
 protected:

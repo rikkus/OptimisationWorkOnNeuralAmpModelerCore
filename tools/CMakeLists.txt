@@ -189,3 +189,26 @@ endif()
 # Don't let this break my build on debug:
 set_source_files_properties(../NAM/dsp.cpp PROPERTIES COMPILE_FLAGS "-Wno-error")
 set_source_files_properties(../NAM/conv1d.cpp PROPERTIES COMPILE_FLAGS "-Wno-error")
+
+# bench_oversized: what a call larger than the maximum buffer size costs, and
+# whether it matches the same audio processed as reservation-sized calls.
+# allocation_tracking.cpp is linked in so the tool can count allocations itself.
+add_executable(bench_oversized bench_oversized.cpp test/allocation_tracking.cpp ${NAM_SOURCES})
+target_compile_features(bench_oversized PUBLIC cxx_std_20)
+set_target_properties(bench_oversized PROPERTIES
+	CXX_VISIBILITY_PRESET hidden
+	INTERPROCEDURAL_OPTIMIZATION TRUE
+	PREFIX ""
+)
+if (MSVC)
+	target_compile_options(bench_oversized PRIVATE
+		"$<$<CONFIG:DEBUG>:/W4>"
+		"$<$<CONFIG:RELEASE>:/O2>"
+	)
+else()
+	target_compile_options(bench_oversized PRIVATE
+		-Wall -Wextra -Wpedantic -Wstrict-aliasing -Wunreachable-code -Wno-unused-parameter
+		"$<$<CONFIG:DEBUG>:-Og;-ggdb;-Werror>"
+		"$<$<CONFIG:RELEASE>:-O3>"
+	)
+endif()

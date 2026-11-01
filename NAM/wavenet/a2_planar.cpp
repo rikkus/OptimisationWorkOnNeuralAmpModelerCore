@@ -2,7 +2,7 @@
 
   #include "a2_planar.h"
 
-  #if defined(NAM_A2_PLANAR)
+  #if defined(NAM_A2_PLANAR) && !defined(NAM_A2_PLANAR_AVX2)
 
     #include <algorithm>
     #include <array>

@@ -1,36 +1,40 @@
 #pragma once
 
-// Planar NEON kernels for the A2 fast path (AArch64 and ARMv7).
+// Planar kernels for the A2 fast path (AArch64, ARMv7, and x86_64 AVX2+FMA).
 //
-// These are drop-in replacements for A2FastModel<3> and A2FastModel<8> that
-// produce **bit-identical** output: not "within a tolerance", not "below the
-// noise floor" -- the same float32 bits, sample for sample.
+// These are drop-in replacements for A2FastModel<3> and A2FastModel<8>. On ARM
+// they produce **bit-identical** output: not "within a tolerance", not "below
+// the noise floor" -- the same float32 bits, sample for sample. On AVX2 the
+// match is the same scalar-order reduction as the ARM kernels (order A), which
+// lands ~133–139 dB below the signal versus Eigen's gebp-backed a2_fast — see
+// the AVX2 section below.
 //
 // The idea in one line: a2_fast keeps the channels of a frame adjacent in
 // memory and vectorises across channels; these kernels keep each channel in its
-// own plane and vectorise across *frames*, so one NEON lane runs a2_fast's
+// own plane and vectorise across *frames*, so one SIMD lane runs a2_fast's
 // per-frame scalar reduction verbatim. Nothing is reassociated, which is what
-// makes the bit-identity claim hold rather than being a lucky accident.
+// makes the bit-identity claim hold on ARM rather than being a lucky accident.
 //
 // -----------------------------------------------------------------------------
 // Where this is active, and where it is not
 //
-// NAM_A2_PLANAR is defined only when the A2 fast path is being built for an ARM
-// target that has fused multiply-add. On every other target -- x86 above all --
-// this header declares nothing, a2_planar.cpp compiles to an object with no
-// symbols, the call site in a2_fast.cpp is preprocessed away, and the A2 path is
-// byte for byte the code that is there today. There is nothing to regress.
+// NAM_A2_PLANAR is defined when the A2 fast path is built for an ARM target
+// with fused multiply-add, or for x86_64 with AVX2 and FMA. Elsewhere this
+// header declares nothing, a2_planar.cpp / a2_planar_avx2.cpp compile to
+// objects with no symbols, the call site in a2_fast.cpp is preprocessed away,
+// and the A2 path is byte for byte the code that is there today.
 //
 // The gate was __APPLE__ && __aarch64__ at first, because Apple Silicon was the
 // only place these had been built and measured. It has since been widened
-// twice, each time on evidence rather than optimism.
+// three times, each time on evidence rather than optimism: AArch64 generally,
+// ARMv7 with NEON+FMA, then x86_64 AVX2+FMA.
 //
 // -----------------------------------------------------------------------------
 // At a glance
 //
-// The promoted kernel is a2_planar in every case: one engine, four
+// The promoted kernel is a2_planar in every case: one engine, six
 // configurations. What varies is the tile width, how a weight reaches the
-// multiplier, and -- at C=8 -- the shape of the conv loop.
+// multiplier, and -- at C=8 on ARM -- the shape of the conv loop.
 //
 //   target     submodel      C  tile  weights    C=8 conv loop
 //   ------------------------------------------------------------------
@@ -38,13 +42,17 @@
 //   AArch64    A2 standard   8     8  by-lane    fold over lambdas
 //   ARMv7      A2 nano       3     8  broadcast  --
 //   ARMv7      A2 standard   8     8  broadcast  plain loop nest
+//   AVX2+FMA   A2 nano       3    32  broadcast  --
+//   AVX2+FMA   A2 standard   8     8  broadcast  plain loop nest
 //
 // "by-lane" is vfmaq_laneq_f32, which encodes the lane in the instruction;
-// "broadcast" is vld1q_dup_f32 at the point of use, because ARMv7 has no
-// by-element FMA at all. Both sections below say why the remaining two columns
-// differ, and neither difference was inherited -- each was measured on the part.
+// "broadcast" is vld1q_dup_f32 (ARM) or _mm256_broadcast_ss (AVX2) at the
+// point of use, because ARMv7 and AVX2 have no by-element FMA. Both sections
+// below say why the remaining two columns differ, and neither difference was
+// inherited -- each was measured on the part.
 //
-// The speed, all of it bit-identical to a2_fast over a full render:
+// The speed (ARM rows bit-identical to a2_fast over a full render; AVX2 rows
+// from the NAMBench full protocol on the named part):
 //
 //   part                  submodel      C  vs a2_fast  conditions
 //   ------------------------------------------------------------------
@@ -54,6 +62,8 @@
 //   Cortex-A76 (Pi 500)   A2 standard   8       2.40x  block 32
 //   Cortex-A17 (RK3288)   A2 nano       3       1.47x  block 32, 1416 MHz
 //   Cortex-A17 (RK3288)   A2 standard   8       1.42x  block 32, 1416 MHz
+//   i5-9500T (pro)        A2 nano       3       5.52x  block 64, ~139 dB
+//   i5-9500T (pro)        A2 standard   8       2.66x  block 64, ~133 dB
 //
 // The M2 rows are carried from the Apple Silicon campaign these kernels came
 // out of, and have not been re-measured since; every other row is a direct
@@ -62,9 +72,9 @@
 // code, different block size, not a discrepancy.
 //
 // Note the inversion. On the M2 the wide model wins bigger; on both ARM parts
-// the narrow one does. That is the same architectural story as the tile widths
-// further down, and the reason none of this travels between targets by
-// assumption.
+// and on the i5-9500T the narrow one does. That is the same architectural
+// story as the tile widths further down, and the reason none of this travels
+// between targets by assumption.
 // -----------------------------------------------------------------------------
 //
 // AArch64 generally:
@@ -91,6 +101,24 @@
 //     32-frame blocks (1.416x and 1.470x). Smaller than the AArch64 wins, and
 //     on this part that is the difference between one instance per core with
 //     nothing left over and one with room for the rest of a signal chain.
+//
+// x86_64 with AVX2 and FMA (body in a2_planar_avx2.cpp):
+//
+//   * Measured on an Intel Core i5-9500T (NAMBench host `pro`), GCC with
+//     -mavx2 -mfma -ffp-contract=fast, performance governor, full protocol
+//     (5 s warm-up / 30 s timing, block 64) over the same 523,808-frame
+//     render. A2 standard 6.507% -> 2.446% of one core (2.660x); A2 nano
+//     1.875% -> 0.340% (5.517x). Tiles and switches were swept on this part
+//     in the X64 lab (Sources/X64Engines); winners are tile 8 / tile 32 with
+//     ring-direct, skip-last 1x1, and a linear-rewind ring — not inherited
+//     from ARM or from the M2.
+//
+//   * Parity versus Eigen-backed a2_fast is ~133 dB (C=8) / ~139 dB (C=3),
+//     not bit-identical. Eigen's AVX2 gebp for N≥4 does not match the
+//     per-tap FMA order these kernels share with the NEON path (order A).
+//     Within the X64 lab the same kernels are bit-identical to that lab's
+//     order-A baseline; the cross-library gap is the Eigen packing, not a
+//     promotion bug. See the Eigen order probe in the NAMBench X64 campaign.
 //
 // __aarch64__ specifically, rather than a spelling that would also catch MSVC's
 // _M_ARM64. That is deliberate and is the one part of the old gate worth
@@ -180,6 +208,11 @@
       /// 32-bit ARM: 16 Q registers, no by-element FMA, narrower NEON datapath.
       /// Selects the ARMv7 weight delivery and tile widths in a2_planar.cpp.
       #define NAM_A2_PLANAR_A32 1
+    #elif defined(__AVX2__) && defined(__FMA__)
+      #define NAM_A2_PLANAR 1
+      /// x86_64 AVX2+FMA: 16 YMM registers, broadcast weight delivery (no
+      /// by-element FMA). Selects the AVX2 body in a2_planar_avx2.cpp.
+      #define NAM_A2_PLANAR_AVX2 1
     #endif
   #endif
 
@@ -197,7 +230,7 @@ namespace wavenet
 namespace a2_fast
 {
 
-/// \brief Build the planar NEON model for an A2 submodel.
+/// \brief Build the planar model for an A2 submodel (NEON or AVX2 body).
 /// \param channels 3 (A2 nano) or 8 (A2 standard); anything else yields nullptr.
 /// \param weights The A2 weight stream, consumed in A2FastModel's order.
 /// \param expected_sample_rate Passed through to DSP.

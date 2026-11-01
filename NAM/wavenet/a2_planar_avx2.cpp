@@ -4,6 +4,10 @@
 //   C=3  tile 32 + ring-direct + skip-last + linear ring   5.52x vs a2_fast (~139 dB)
 //   C=8  tile  8 + ring-direct + skip-last + linear ring   2.66x vs a2_fast (~133 dB)
 // Lab stacked winners under the same protocol match these within noise.
+// The same tiles win on a Core i7-4770HQ in VirtualBox (Ampeg capture, one
+// vCPU, 8 s window): C=8 3.19x, C=3 7.56x. That guest's spread is wider than
+// the protocol's 3% gate, so those two figures are the ranking run, not a
+// Bencher upload. No second body.
 //
 // See a2_planar.h for the gate. This file is the AVX2 body; the NEON body in
 // a2_planar.cpp is not compiled when NAM_A2_PLANAR_AVX2 is set.

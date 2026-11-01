@@ -64,6 +64,8 @@
 //   Cortex-A17 (RK3288)   A2 standard   8       1.42x  block 32, 1416 MHz
 //   i5-9500T (pro)        A2 nano       3       5.52x  block 64, ~139 dB
 //   i5-9500T (pro)        A2 standard   8       2.66x  block 64, ~133 dB
+//   i7-4770HQ (vbox)      A2 nano       3       7.56x  Ampeg, 8 s window
+//   i7-4770HQ (vbox)      A2 standard   8       3.19x  Ampeg, 8 s window
 //
 // The M2 rows are carried from the Apple Silicon campaign these kernels came
 // out of, and have not been re-measured since; every other row is a direct
@@ -112,6 +114,16 @@
 //     in the X64 lab (Sources/X64Engines); winners are tile 8 / tile 32 with
 //     ring-direct, skip-last 1x1, and a linear-rewind ring — not inherited
 //     from ARM or from the M2.
+//
+//   * The same body on a Core i7-4770HQ in VirtualBox (NAMBench host `mp`,
+//     testbed `i7-4770HQ-vbox`, one vCPU pinned). The X64 lab ladder picks the
+//     same compositions: C=8 tile 8 and C=3 tile 32, both with ring-direct,
+//     skip-last, and the linear ring. On the Ampeg capture, an 8-second
+//     window gives A2 standard 12.36% -> 3.88% of one core (3.19x) and A2
+//     nano 4.51% -> 0.60% (7.56x). Pass-to-pass spread on that guest is about
+//     5–16%, so the run does not meet the protocol's 3% agreement gate and
+//     is not a Bencher upload. a2_planar and the lab's stacked winners sit
+//     inside that spread, which is why this part does not get its own body.
 //
 //   * Parity versus Eigen-backed a2_fast is ~133 dB (C=8) / ~139 dB (C=3),
 //     not bit-identical. Eigen's AVX2 gebp for N≥4 does not match the
